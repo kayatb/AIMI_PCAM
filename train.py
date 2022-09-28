@@ -126,7 +126,6 @@ def train(model, args):
 
             # Update parameters
             optimizer.step()
-            print("done with batch")
 
         loss_value /= no_batches  # Average over all batches.
         logging_info['train_loss'].append(loss_value)
