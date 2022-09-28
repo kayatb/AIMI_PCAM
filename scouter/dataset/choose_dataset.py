@@ -2,7 +2,8 @@ from dataset.mnist import MNIST
 from dataset.CUB200 import CUB_200
 from dataset.ConText import ConText, MakeList, MakeListImage
 from dataset.transform_func import make_transform
-from dataset.ACRIMA import get_data, ACRIMA, get_mean_and_std
+from dataset.ACRIMA import get_data, ACRIMA
+from torchvision.datasets import PCAM
 
 
 def select_dataset(args):
@@ -29,5 +30,10 @@ def select_dataset(args):
         dataset_train = ACRIMA(train, transform=make_transform(args, "train"))
         dataset_val = ACRIMA(val, transform=make_transform(args, "val"))
         return dataset_train, dataset_val
+    if args.dataset == "PCAM":
+        train = PCAM("data", "train", make_transform(args, "train"))
+        val = PCAM("data", "val", make_transform(args, "val"))
+        # test_set = PCAM('data', 'test', transform=transform, download=False)
+        return train, val
 
     raise ValueError(f"unknown {args.dataset}")
