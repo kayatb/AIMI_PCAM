@@ -14,7 +14,6 @@ def add_args():
 
     parser.add_argument("--model", default="resnet18", type=str)
     parser.add_argument("--seed", default=432, type=int)
-    parser.add_argument("--tqdm", action='store_true')
 
     # Training settings.
     parser.add_argument("--lr", default=0.0001, type=float)
@@ -25,6 +24,9 @@ def add_args():
     # parser.add_argument("--device", default="cuda", help="device to use for training / testing")
 
     parser.add_argument("--output_dir", default="saved_models/", help="path where to save trained model, empty for no saving")
+
+    parser.add_argument("--tqdm", action='store_true')
+    parser.add_argument("--max_batches_per_epoch", default=None, type=int)
 
     # fine-tuning settings (not implemented)
     # parser.add_argument("--freeze_layers", default=2, type=int, help="number of freeze layers")

@@ -108,15 +108,19 @@ def train(model, args):
         model.train()  # Put model in train mode
 
         loss_value = 0
-        no_batches = 0
+        batches_count = 0
 
-        test_correct = 0
-        test_incorrect = 0
+        train_correct = 0
+        train_incorrect = 0
 
         for x, labels in optional_tqdm(dataloader_train, args):
+            batches_count += 1
+
+            if args.max_batches_per_epoch is not None and batches_count >= args.max_batches_per_epoch:
+                break
+
             binary_labels = labels.to(device)
             labels = nn.functional.one_hot(labels, num_classes=2).type(torch.FloatTensor)
-            no_batches += 1
 
             # Necessary when running on GPU.
             x = x.to(device)
@@ -130,19 +134,19 @@ def train(model, args):
             loss_value += loss.item()
 
             predicted_labels = torch.argmax(predictions, dim=-1)
-            test_correct += torch.sum(predicted_labels == binary_labels).item()
-            test_incorrect += torch.sum(predicted_labels != binary_labels).item()
+            train_correct += torch.sum(predicted_labels == binary_labels).item()
+            train_incorrect += torch.sum(predicted_labels != binary_labels).item()
 
             # Update parameters
             optimizer.step()
 
-        loss_value /= no_batches  # Average over all batches.
+        loss_value /= batches_count  # Average over all batches.
         logging_info['train_loss'].append(loss_value)
         # Calculate validation accuracy for this epoch
         val_acc = evaluate_model(model, dataloader_val, device)
         logging_info['val_acc'].append(val_acc)
         # Save train set accuracy.
-        train_acc = evaluate_model(model, dataloader_train, device)
+        train_acc = train_correct / (train_correct + train_incorrect)# evaluate_model(model, dataloader_train, device)
         logging_info['train_acc'].append(train_acc)
 
         print(f"Epoch {e + 1} => training accuracy: {train_acc}, validation accuracy: {val_acc}, loss: {loss_value}")
