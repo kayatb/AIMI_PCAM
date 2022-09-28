@@ -107,6 +107,7 @@ def make_transform(args, mode):
         "ConText": [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]],
         "ImageNet": [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]],
         "ACRIMA": [[1.0397, -0.3581, -1.3642], [0.7927, 0.7121, 0.3838]],
+        "PCAM": [[0.7008, 0.5384, 0.6916], [0.2350, 0.2774, 0.2128]],
     }
     selected_norm = normalize_value[args.dataset]
     normalize = Compose([ToTensor(), Normalize(selected_norm[0], selected_norm[1])])
@@ -115,7 +116,7 @@ def make_transform(args, mode):
         return Compose(
             [
                 Resize((args.img_size, args.img_size)),
-                Aug(args.aug),
+                # Aug(args.aug),
                 normalize,
             ]
         )
