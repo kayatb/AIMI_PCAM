@@ -7,13 +7,14 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 from copy import deepcopy
+from utils import optional_tqdm
 
 
 def calc_accuracy(predictions, targets):
     """
     Computes the prediction accuracy, i.e. the average of correct predictions
     of the network.
-    
+
     Args:
       predictions: 2D float array of size [batch_size, n_classes]
       labels: 2D int array of size [batch_size, n_classes]
@@ -56,7 +57,7 @@ def evaluate_model(model, data_loader, device):
             accuracies.append(calc_accuracy(predictions, labels))
 
     avg_accuracy = sum(accuracies) / len(accuracies)
-    
+
     return avg_accuracy
 
 
@@ -66,7 +67,7 @@ def train(model, args):
 
     Returns:
       model: The trained model that performed best on the validation set.
-      logging_info: An object containing logging information: train loss, train accuracy, 
+      logging_info: An object containing logging information: train loss, train accuracy,
                      validation accuracy, final test accuracy, number of epochs (feel free to add anything you want).
     """
 
@@ -109,7 +110,11 @@ def train(model, args):
         loss_value = 0
         no_batches = 0
 
-        for x, labels in dataloader_train:
+        test_correct = 0
+        test_incorrect = 0
+
+        for x, labels in optional_tqdm(dataloader_train, args):
+            binary_labels = labels.to(device)
             labels = nn.functional.one_hot(labels, num_classes=2).type(torch.FloatTensor)
             no_batches += 1
 
@@ -123,6 +128,10 @@ def train(model, args):
             optimizer.zero_grad()
             loss.backward()
             loss_value += loss.item()
+
+            predicted_labels = torch.argmax(predictions, dim=-1)
+            test_correct += torch.sum(predicted_labels == binary_labels).item()
+            test_incorrect += torch.sum(predicted_labels != binary_labels).item()
 
             # Update parameters
             optimizer.step()
@@ -142,7 +151,7 @@ def train(model, args):
         if val_acc > best_val_acc:
             best_model = deepcopy(model)
             best_val_acc = val_acc
-    
+
     # Test best model
     print("=== Finished training, now evaluating on the test set ===")
     test_accuracy = evaluate_model(best_model, dataloader_test, device)

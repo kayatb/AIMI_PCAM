@@ -14,6 +14,7 @@ def add_args():
 
     parser.add_argument("--model", default="resnet18", type=str)
     parser.add_argument("--seed", default=432, type=int)
+    parser.add_argument("--tqdm", action='store_true')
 
     # Training settings.
     parser.add_argument("--lr", default=0.0001, type=float)
@@ -58,7 +59,7 @@ def matplotlib_imshow(img, one_channel=False):
         plt.imshow(npimg, cmap="Greys")
     else:
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
-    
+
     plt.show()
 
 
