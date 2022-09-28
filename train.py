@@ -7,13 +7,14 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 from copy import deepcopy
+from utils import optional_tqdm
 
 
 def calc_accuracy(predictions, targets):
     """
     Computes the prediction accuracy, i.e. the average of correct predictions
     of the network.
-    
+
     Args:
       predictions: 2D float array of size [batch_size, n_classes]
       labels: 2D int array of size [batch_size, n_classes]
@@ -56,7 +57,7 @@ def evaluate_model(model, data_loader, device):
             accuracies.append(calc_accuracy(predictions, labels))
 
     avg_accuracy = sum(accuracies) / len(accuracies)
-    
+
     return avg_accuracy
 
 
@@ -66,7 +67,7 @@ def train(model, args):
 
     Returns:
       model: The trained model that performed best on the validation set.
-      logging_info: An object containing logging information: train loss, train accuracy, 
+      logging_info: An object containing logging information: train loss, train accuracy,
                      validation accuracy, final test accuracy, number of epochs (feel free to add anything you want).
     """
 
@@ -107,11 +108,19 @@ def train(model, args):
         model.train()  # Put model in train mode
 
         loss_value = 0
-        no_batches = 0
+        batches_count = 0
 
-        for x, labels in dataloader_train:
+        train_correct = 0
+        train_incorrect = 0
+
+        for x, labels in optional_tqdm(dataloader_train, args):
+            batches_count += 1
+
+            if args.max_batches_per_epoch is not None and batches_count >= args.max_batches_per_epoch:
+                break
+
+            binary_labels = labels.to(device)
             labels = nn.functional.one_hot(labels, num_classes=2).type(torch.FloatTensor)
-            no_batches += 1
 
             # Necessary when running on GPU.
             x = x.to(device)
@@ -124,16 +133,20 @@ def train(model, args):
             loss.backward()
             loss_value += loss.item()
 
+            predicted_labels = torch.argmax(predictions, dim=-1)
+            train_correct += torch.sum(predicted_labels == binary_labels).item()
+            train_incorrect += torch.sum(predicted_labels != binary_labels).item()
+
             # Update parameters
             optimizer.step()
 
-        loss_value /= no_batches  # Average over all batches.
+        loss_value /= batches_count  # Average over all batches.
         logging_info['train_loss'].append(loss_value)
         # Calculate validation accuracy for this epoch
         val_acc = evaluate_model(model, dataloader_val, device)
         logging_info['val_acc'].append(val_acc)
         # Save train set accuracy.
-        train_acc = evaluate_model(model, dataloader_train, device)
+        train_acc = train_correct / (train_correct + train_incorrect)# evaluate_model(model, dataloader_train, device)
         logging_info['train_acc'].append(train_acc)
 
         print(f"Epoch {e + 1} => training accuracy: {train_acc}, validation accuracy: {val_acc}, loss: {loss_value}")
@@ -142,7 +155,7 @@ def train(model, args):
         if val_acc > best_val_acc:
             best_model = deepcopy(model)
             best_val_acc = val_acc
-    
+
     # Test best model
     print("=== Finished training, now evaluating on the test set ===")
     test_accuracy = evaluate_model(best_model, dataloader_test, device)

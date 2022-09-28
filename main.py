@@ -25,6 +25,9 @@ def add_args():
 
     parser.add_argument("--output_dir", default="saved_models/", help="path where to save trained model, empty for no saving")
 
+    parser.add_argument("--tqdm", action='store_true')
+    parser.add_argument("--max_batches_per_epoch", default=None, type=int)
+
     # fine-tuning settings (not implemented)
     # parser.add_argument("--freeze_layers", default=2, type=int, help="number of freeze layers")
     # parser.add_argument("--pre_dir", default="pre_model/", help="path of pre-train model")
@@ -58,7 +61,7 @@ def matplotlib_imshow(img, one_channel=False):
         plt.imshow(npimg, cmap="Greys")
     else:
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
-    
+
     plt.show()
 
 
