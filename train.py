@@ -9,7 +9,6 @@ import torch.nn as nn
 from copy import deepcopy
 from utils import optional_tqdm
 
-
 def calc_accuracy(predictions, targets):
     """
     Computes the prediction accuracy, i.e. the average of correct predictions
@@ -61,7 +60,7 @@ def evaluate_model(model, data_loader, device):
     return avg_accuracy
 
 
-def train(model, args):
+def train(model, args, startup_params=None):
     """
     Performs a full training cycle of a PCAM model.
 
@@ -101,7 +100,10 @@ def train(model, args):
     best_model = None
 
     # Training loop including validation
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    if startup_params is not None:
+        optimizer = optim.Adam(startup_params(model), lr=args.lr)
+    else:
+        optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     print("=== Starting the training ===")
     for e in range(args.epochs):
@@ -146,15 +148,18 @@ def train(model, args):
         val_acc = evaluate_model(model, dataloader_val, device)
         logging_info['val_acc'].append(val_acc)
         # Save train set accuracy.
-        train_acc = train_correct / (train_correct + train_incorrect)# evaluate_model(model, dataloader_train, device)
+        train_acc = train_correct / (train_correct + train_incorrect) # evaluate_model(model, dataloader_train, device)
         logging_info['train_acc'].append(train_acc)
 
-        print(f"Epoch {e + 1} => training accuracy: {train_acc}, validation accuracy: {val_acc}, loss: {loss_value}")
+        print(f"Epoch {e + 1} => training accuacy: {train_acc}, validation accuracy: {val_acc}, loss: {loss_value}")
 
         # Update best model (if necessary)
         if val_acc > best_val_acc:
             best_model = deepcopy(model)
             best_val_acc = val_acc
+
+        if startup_params is not None:
+            optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # Test best model
     print("=== Finished training, now evaluating on the test set ===")

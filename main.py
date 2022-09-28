@@ -6,6 +6,8 @@ import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import torchvision
+import torch
+from torch import nn
 
 
 def add_args():
@@ -13,6 +15,7 @@ def add_args():
     parser = argparse.ArgumentParser("Set PCAM model", add_help=False)
 
     parser.add_argument("--model", default="resnet18", type=str)
+    parser.add_argument("--pretrained", action='store_true')
     parser.add_argument("--seed", default=432, type=int)
 
     # Training settings.
@@ -46,7 +49,12 @@ def load_model(model_name, pretrained=False):
     """ Return the specified model. """
     # TODO: add more models here.
     if model_name == "resnet18":
-        return torchvision.models.resnet18(num_classes=2, pretrained=pretrained)
+        if not pretrained:
+            return torchvision.models.resnet18(num_classes=2, pretrained=False), None
+        else:
+            resnet = torchvision.models.resnet18(num_classes=1000, pretrained=True)
+            resnet.fc = nn.Linear(resnet.fc.in_features, 2)
+            return resnet, lambda model: model.fc.parameters()
     else:
         raise f"Unknown model name {model_name}."
 
@@ -69,8 +77,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser("PCAM model training and evaluation script", parents=[add_args()])
     args = parser.parse_args()
 
-    model = load_model(args.model)
-    best_model, logging_info = train(model, args)
+    model, startup_params = load_model(args.model, args.pretrained)
+    best_model, logging_info = train(model, args, startup_params)
 
     # train, val, test = dataset.load_dataset(4)
 

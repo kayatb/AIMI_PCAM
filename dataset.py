@@ -10,15 +10,15 @@ def load_datasets(batch_size):
         transforms.ToTensor()
     ])
 
-    # Create datasets. 
+    # Create datasets.
     # WARNING: set `download=True` if you don't have the dataset yet. Won't download if it is present.
     train_set = PCAM('data', 'train', transform=transform, download=True)
     val_set = PCAM('data', 'val', transform=transform, download=True)
     test_set = PCAM('data', 'test', transform=transform, download=True)
 
     # Create dataloaders. Only shuffle train set.
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=8)
+    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=8)
+    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=8)
 
     return train_loader, val_loader, test_loader
