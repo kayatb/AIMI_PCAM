@@ -18,7 +18,7 @@ def add_args():
     # Training settings.
     parser.add_argument("--lr", default=0.0001, type=float)
     # parser.add_argument("--lr_drop", default=70, type=int)
-    parser.add_argument("--batch_size", default=64, type=int)
+    parser.add_argument("--batch_size", default=128, type=int)
     # parser.add_argument("--weight_decay", default=0.0001, type=float)
     parser.add_argument("--epochs", default=10, type=int)
     # parser.add_argument("--device", default="cuda", help="device to use for training / testing")

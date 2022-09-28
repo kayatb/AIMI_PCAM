@@ -26,14 +26,14 @@ def calc_accuracy(predictions, targets):
     """
     # Get the labels of the predictions by taking the index of the max value
     # for each row in the predictions matrix.
-    preds = np.argmax(predictions.numpy(), axis=1)
-    accuracy = np.sum(preds == targets.numpy())
+    preds = np.argmax(predictions.cpu().numpy(), axis=1)
+    accuracy = np.sum(preds == targets.cpu().numpy())
     accuracy /= len(targets)
 
     return accuracy
 
 
-def evaluate_model(model, data_loader):
+def evaluate_model(model, data_loader, device):
     """
     Performs the evaluation of the PCAM model on a given dataset.
 
@@ -49,6 +49,9 @@ def evaluate_model(model, data_loader):
 
     with torch.no_grad():
         for x, labels in data_loader:
+            x = x.to(device)
+            labels = labels.to(device)
+
             predictions = model(x).squeeze(dim=1)
             accuracies.append(calc_accuracy(predictions, labels))
 
@@ -103,7 +106,7 @@ def train(model, args):
     for e in range(args.epochs):
         model.train()  # Put model in train mode
 
-        loss_val = 0
+        loss_value = 0
         no_batches = 0
 
         for x, labels in dataloader_train:
@@ -116,35 +119,34 @@ def train(model, args):
 
             predictions = model(x).squeeze(dim=1)  # Forward pass
             loss = loss_module(predictions, labels)  # Calculate loss
-            # Backward pass
+
             optimizer.zero_grad()
             loss.backward()
+            loss_value += loss.item()
 
-            loss_val += loss.item()
             # Update parameters
             optimizer.step()
+            print("done with batch")
 
-            loss_val /= no_batches  # Average over all batches.
-            logging_info['train_loss'].append(loss_val)
+        loss_value /= no_batches  # Average over all batches.
+        logging_info['train_loss'].append(loss_value)
+        # Calculate validation accuracy for this epoch
+        val_acc = evaluate_model(model, dataloader_val, device)
+        logging_info['val_acc'].append(val_acc)
+        # Save train set accuracy.
+        train_acc = evaluate_model(model, dataloader_train, device)
+        logging_info['train_acc'].append(train_acc)
 
-            # Calculate validation accuracy for this epoch
-            val_acc = evaluate_model(model, dataloader_val)
-            logging_info['val_acc'].append(val_acc)
+        print(f"Epoch {e + 1} => training accuracy: {train_acc}, validation accuracy: {val_acc}, loss: {loss_value}")
 
-            # Save train set accuracy.
-            train_acc = evaluate_model(model, dataloader_train)
-            logging_info['train_acc'].append(train_acc)
-
-            print(f"Epoch {e + 1} => training accuracy: {train_acc}, validation accuracy: {val_acc}, loss: {loss_val}")
-
-            # Update best model (if necessary)
-            if val_acc > best_val_acc:
-                best_model = deepcopy(model)
-                best_val_acc = val_acc
+        # Update best model (if necessary)
+        if val_acc > best_val_acc:
+            best_model = deepcopy(model)
+            best_val_acc = val_acc
     
     # Test best model
     print("=== Finished training, now evaluating on the test set ===")
-    test_accuracy = evaluate_model(best_model, dataloader_test)
+    test_accuracy = evaluate_model(best_model, dataloader_test, device)
     logging_info['test_acc'] = test_accuracy
     print(f"Final Test Set Accuracy: {test_accuracy}")
 
