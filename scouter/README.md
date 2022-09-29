@@ -10,6 +10,7 @@ Code available at: https://github.com/wbw520/scouter
 Commit: 5885b82 on Sep 7, 2021
 
 >Maarten Burger, Kaya ter Burg, Sam Titarsolej, & Selina Jasmin Khan. (2022). \[Re\] Reproducibility Study - SCOUTER: Slot Attention-based Classifier for Explainable Image Recognition. Rescience C, 8(2), #8. 
+
 [PDF](https://doi.org/10.5281/zenodo.6574641)
 
 Code available at: https://github.com/kayatb/reproduce_SCOUTER
