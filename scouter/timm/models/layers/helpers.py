@@ -3,7 +3,8 @@
 Hacked together by Ross Wightman
 """
 from itertools import repeat
-from torch._six import container_abcs
+# from torch._six import container_abcs
+from collections import abc as container_abcs
 
 
 # From PyTorch internals

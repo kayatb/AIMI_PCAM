@@ -1,7 +1,7 @@
 .vscode
 .vimspector.json
 
-data/
+/data/
 saved_models/
 env2/
 envscouter/

@@ -25,9 +25,9 @@ def get_args_parser():
             raise argparse.ArgumentTypeError("Unsupported value encountered.")
 
     parser = argparse.ArgumentParser("Set SCOUTER model", add_help=False)
-    parser.add_argument("--model", default="resnet18", type=str)
+    parser.add_argument("--model", default="resnet26d", type=str)
     parser.add_argument("--dataset", default="PCAM", type=str)
-    parser.add_argument("--channel", default=512, type=int)
+    parser.add_argument("--channel", default=2048, type=int)
 
     # training set
     parser.add_argument("--lr", default=0.0001, type=float)
@@ -36,7 +36,7 @@ def get_args_parser():
     parser.add_argument("--weight_decay", default=0.0001, type=float)
     parser.add_argument("--epochs", default=10, type=int)
     parser.add_argument("--num_classes", default="2", type=str)
-    parser.add_argument("--img_size", default=96, help="path for save data")
+    parser.add_argument("--img_size", default=260, type=int, help="path for save data")
     parser.add_argument("--pre_trained", default=True, type=str2bool, help="whether use pre parameter for backbone")
     parser.add_argument("--use_slot", default=True, type=str2bool, help="whether use slot module")
     parser.add_argument("--use_pre", default=False, type=str2bool, help="whether use pre dataset parameter")
@@ -53,11 +53,11 @@ def get_args_parser():
 
     # slot setting
     parser.add_argument("--loss_status", default=1, type=int, help="positive or negative loss")
-    parser.add_argument("--freeze_layers", default=2, type=int, help="number of freeze layers")
+    parser.add_argument("--freeze_layers", default=0, type=int, help="number of freeze layers")
     parser.add_argument("--hidden_dim", default=64, type=int, help="dimension of to_k")
     parser.add_argument("--slots_per_class", default="3", type=str, help="number of slot for each class")
     parser.add_argument("--power", default="2", type=str, help="power of the slot loss")
-    parser.add_argument("--to_k_layer", default=1, type=int, help="number of layers in to_k")
+    parser.add_argument("--to_k_layer", default=3, type=int, help="number of layers in to_k")
     parser.add_argument("--lambda_value", default="1.", type=str, help="lambda of slot loss")
     parser.add_argument("--vis", default=False, type=str2bool, help="whether save slot visualization")
     parser.add_argument("--vis_id", default=0, type=int, help="choose image to visualization")
@@ -81,7 +81,8 @@ def get_args_parser():
 
 
 def main(args):
-    prt.init_distributed_mode(args)
+    # prt.init_distributed_mode(args)
+    args.distributed = False
     device = torch.device(args.device)
 
     model = SlotModel(args)
