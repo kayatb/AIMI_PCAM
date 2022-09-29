@@ -26,7 +26,7 @@ def get_args_parser():
 
     parser = argparse.ArgumentParser("Set SCOUTER model", add_help=False)
     parser.add_argument("--model", default="resnet18", type=str)
-    parser.add_argument("--dataset", default="MNIST", type=str)
+    parser.add_argument("--dataset", default="PCAM", type=str)
     parser.add_argument("--channel", default=512, type=int)
 
     # training set
@@ -35,8 +35,8 @@ def get_args_parser():
     parser.add_argument("--batch_size", default=64, type=int)
     parser.add_argument("--weight_decay", default=0.0001, type=float)
     parser.add_argument("--epochs", default=10, type=int)
-    parser.add_argument("--num_classes", default="10", type=str)
-    parser.add_argument("--img_size", default=260, help="path for save data")
+    parser.add_argument("--num_classes", default="2", type=str)
+    parser.add_argument("--img_size", default=96, help="path for save data")
     parser.add_argument("--pre_trained", default=True, type=str2bool, help="whether use pre parameter for backbone")
     parser.add_argument("--use_slot", default=True, type=str2bool, help="whether use slot module")
     parser.add_argument("--use_pre", default=False, type=str2bool, help="whether use pre dataset parameter")
@@ -64,9 +64,9 @@ def get_args_parser():
 
     # data/machine set
     parser.add_argument(
-        "--dataset_dir", default="../PAN/bird_200/CUB_200_2011/CUB_200_2011/", help="path for save data"
+        "--dataset_dir", default="data", help="path for save data"
     )
-    parser.add_argument("--output_dir", default="saved_model/", help="path where to save, empty for no saving")
+    parser.add_argument("--output_dir", default="saved_models_scouter/", help="path where to save, empty for no saving")
     parser.add_argument("--pre_dir", default="pre_model/", help="path of pre-train model")
     parser.add_argument("--device", default="cuda", help="device to use for training / testing")
     parser.add_argument("--num_workers", default=4, type=int)
