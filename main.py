@@ -8,7 +8,7 @@ import numpy as np
 import torchvision
 import torch
 from torch import nn
-
+from copy import Error, deepcopy
 
 def add_args():
     """ Add a lot of commande line arguments for specifying all sorts of hyperparams and other settings. """
@@ -16,7 +16,11 @@ def add_args():
 
     parser.add_argument("--model", default="resnet18", type=str)
     parser.add_argument("--pretrained", action='store_true')
+    parser.add_argument("--no_startup_epoch", action='store_true')
     parser.add_argument("--seed", default=432, type=int)
+
+    parser.add_argument("--weight_decay_base", choices=['zero', 'pretrained'], default=None)
+    parser.add_argument("--weight_decay_strength", type=float, default=0.001)
 
     # Training settings.
     parser.add_argument("--lr", default=0.0001, type=float)
@@ -56,7 +60,7 @@ def load_model(model_name, pretrained=False):
             resnet.fc = nn.Linear(resnet.fc.in_features, 2)
             return resnet, lambda model: model.fc.parameters()
     else:
-        raise f"Unknown model name {model_name}."
+        raise Error(f"Unknown model name {model_name}.")
 
 
 def matplotlib_imshow(img, one_channel=False):
@@ -78,7 +82,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     model, startup_params = load_model(args.model, args.pretrained)
-    best_model, logging_info = train(model, args, startup_params)
+
+    if args.weight_decay_base == "zero":
+        weight_decay_base = 0
+    elif args.weight_decay_base == "pretrained":
+        weight_decay_base = deepcopy(model)
+    else:
+        weight_decay_base = None
+
+    best_model, logging_info = train(model, args, None if args.no_startup_epoch else startup_params, weight_decay_base, args.weight_decay_strength)
 
     # train, val, test = dataset.load_dataset(4)
 

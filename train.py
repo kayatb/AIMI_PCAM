@@ -8,6 +8,7 @@ import torch.optim as optim
 import torch.nn as nn
 from copy import deepcopy
 from utils import optional_tqdm
+import torchvision
 
 def calc_accuracy(predictions, targets):
     """
@@ -59,8 +60,13 @@ def evaluate_model(model, data_loader, device):
 
     return avg_accuracy
 
+def directional_weight_decay(parameters, base_parameters, strength):
+    for p, base_p in zip(parameters, base_parameters):
+        # base_p: nn.parameter.Parameter = base_p
+        if p.requires_grad:
+            p.data.add_(base_p - p, alpha=strength)
 
-def train(model, args, startup_params=None):
+def train(model: nn.Module, args, startup_params=None, weight_decay_base=None, weight_decay_strength=0.001):
     """
     Performs a full training cycle of a PCAM model.
 
@@ -87,7 +93,9 @@ def train(model, args, startup_params=None):
     print("Data loaded.")
 
     # Initialize model and loss module
-    model.to(device)
+    model = model.to(device)
+    if isinstance(weight_decay_base, nn.Module):
+        weight_decay_base = weight_decay_base.to(device)
     loss_module = torch.nn.BCEWithLogitsLoss()
 
     logging_info = {}
@@ -142,6 +150,28 @@ def train(model, args, startup_params=None):
             # Update parameters
             optimizer.step()
 
+            if weight_decay_base == 0:
+                optimizer.zero_grad()
+                for parameter in model.parameters():
+                    parameter.data.add_(-parameter, alpha=weight_decay_strength)
+            elif isinstance(weight_decay_base, torchvision.models.ResNet) and isinstance(model, torchvision.models.ResNet):
+                optimizer.zero_grad()
+                weight_decay_base: torchvision.models.ResNet = weight_decay_base
+                # directional_weight_decay(model.conv1.parameters(), weight_decay_base.conv1.parameters())
+                directional_weight_decay(model.conv1  .parameters(), weight_decay_base.conv1  .parameters(), strength=weight_decay_strength)
+                directional_weight_decay(model.bn1    .parameters(), weight_decay_base.bn1    .parameters(), strength=weight_decay_strength)
+                directional_weight_decay(model.relu   .parameters(), weight_decay_base.relu   .parameters(), strength=weight_decay_strength)
+                directional_weight_decay(model.maxpool.parameters(), weight_decay_base.maxpool.parameters(), strength=weight_decay_strength)
+                directional_weight_decay(model.layer1 .parameters(), weight_decay_base.layer1 .parameters(), strength=weight_decay_strength)
+                directional_weight_decay(model.layer2 .parameters(), weight_decay_base.layer2 .parameters(), strength=weight_decay_strength)
+                directional_weight_decay(model.layer3 .parameters(), weight_decay_base.layer3 .parameters(), strength=weight_decay_strength)
+                directional_weight_decay(model.layer4 .parameters(), weight_decay_base.layer4 .parameters(), strength=weight_decay_strength)
+
+                # for parameter, base_value in zip(model.parameters(), weight_decay_base.parameters()):
+                #     parameter.add_(-parameter, base_value, alpha=weight_decay_strength)
+
+                weight_decay_base
+                
         loss_value /= batches_count  # Average over all batches.
         logging_info['train_loss'].append(loss_value)
         # Calculate validation accuracy for this epoch
