@@ -18,7 +18,8 @@ Commit: 5885b82 on Sep 7, 2021
 from __future__ import print_function
 
 import argparse
-import json
+
+# import json
 import os
 import os.path
 
@@ -30,11 +31,62 @@ from sloter.slot_model import SlotModel
 from train import get_args_parser
 from torchvision import transforms
 
-from metrics.utils import exp_data
-from metrics.area_size import calc_area_size
-from metrics.IAUC_DAUC import calc_iauc_and_dauc_batch
-from metrics.precision import calc_precision
-from metrics.saliency_evaluation.eval_infid_sen import calc_infid_and_sens
+# from metrics.utils import exp_data
+# from metrics.area_size import calc_area_size
+# from metrics.IAUC_DAUC import calc_iauc_and_dauc_batch
+# from metrics.precision import calc_precision
+# from metrics.saliency_evaluation.eval_infid_sen import calc_infid_and_sens
+
+
+def calc_accuracy(predictions, targets):
+    """
+    Computes the prediction accuracy, i.e. the average of correct predictions
+    of the network.
+
+    Args:
+      predictions: 2D float array of size [batch_size, n_classes]
+      labels: 2D int array of size [batch_size, n_classes]
+              with one-hot encoding. Ground truth labels for
+              each sample in the batch
+    Returns:
+      accuracy: scalar float, the accuracy of predictions,
+                i.e. the average correct predictions over the whole batch
+
+    """
+    # Get the labels of the predictions by taking the index of the max value
+    # for each row in the predictions matrix.
+    preds = np.argmax(predictions.cpu().numpy(), axis=1)
+    accuracy = np.sum(preds == targets.cpu().numpy())
+    accuracy /= len(targets)
+
+    return accuracy
+
+
+def evaluate_model(model, data_loader, device):
+    """
+    Performs the evaluation of the PCAM model on a given dataset.
+
+    Args:
+      model: An instance of the model to evaluate.
+      data_loader: The data loader of the dataset to evaluate.
+    Returns:
+      avg_accuracy: scalar float, the average accuracy of the model on the dataset.
+    """
+    accuracies = []
+
+    model.eval()  # Put model in evaluation mode.
+
+    with torch.no_grad():
+        for x, labels in data_loader:
+            x = x.to(device)
+            labels = labels.to(device)
+
+            predictions = model(x).squeeze(dim=1)
+            accuracies.append(calc_accuracy(predictions, labels))
+
+    avg_accuracy = sum(accuracies) / len(accuracies)
+
+    return avg_accuracy
 
 
 def prepare(batch_size):
@@ -123,9 +175,6 @@ def prepare_data_point(data, transform, device):
 def generate_explanations(model, data_loader_val, device, save_path=None):
     """Generate and save the explanations of the model for the images in the validation set.
     Only the ground truth explanation and the least similar class are generated/saved."""
-    with open("lsc_label_id.json") as json_file:
-        lsc_dict = json.load(json_file)
-
     if not save_path:
         os.makedirs("exps/positive", exist_ok=True)
         os.makedirs("exps/negative", exist_ok=True)
@@ -134,89 +183,51 @@ def generate_explanations(model, data_loader_val, device, save_path=None):
     for data in data_loader_val:
         image, label, fname = prepare_data_point(data, transform, device)
         # Explanation image is generated during forward pass of image in the model.
-        _ = model(torch.unsqueeze(image, dim=0), save_id=(label, lsc_dict[str(label)], save_path, fname))
+        _ = model(torch.unsqueeze(image, dim=0), save_id=(label, abs(label - 1), save_path, fname))
 
 
-def eval(data_loader_val, transform, device, loss_status, img_size, exp_dir="exps"):
-    """Evaluate the model on several metrics using the validation set."""
-    # Load the bounding boxes
-    with open("resized_bboxes.json", "r") as fp:
-        bboxes = json.load(fp)
+# def eval(data_loader_val, transform, device, loss_status, img_size, exp_dir="exps"):
+#     """Evaluate the model on several metrics using the validation set."""
+#     # Load the bounding boxes
+#     with open("resized_bboxes.json", "r") as fp:
+#         bboxes = json.load(fp)
 
-    total_area_size = 0
-    total_precision = 0
+#     total_area_size = 0
+#     total_precision = 0
 
-    num_points = 0
-    # Process each image.
-    for data in data_loader_val:
-        _, _, fname = prepare_data_point(data, transform, device)
+#     num_points = 0
+#     # Process each image.
+#     for data in data_loader_val:
+#         _, _, fname = prepare_data_point(data, transform, device)
 
-        # Determine for which image/explanation to evaluate.
-        if loss_status > 0:  # Positive explanations
-            dir = "positive"
-        else:  # Negative explanations
-            dir = "negative"
+#         # Determine for which image/explanation to evaluate.
+#         if loss_status > 0:  # Positive explanations
+#             dir = "positive"
+#         else:  # Negative explanations
+#             dir = "negative"
 
-        exp_image = Image.open(os.path.join(exp_dir, dir, fname + ".png"))
+#         exp_image = Image.open(os.path.join(exp_dir, dir, fname + ".png"))
 
-        # Calculate all metrics
-        total_area_size += calc_area_size(exp_image)
-        total_precision += calc_precision(exp_image, img_size, fname, bboxes)
+#         # Calculate all metrics
+#         total_area_size += calc_area_size(exp_image)
+#         total_precision += calc_precision(exp_image, img_size, fname, bboxes)
 
-        num_points += 1
+#         num_points += 1
 
-        if num_points % 1000 == 0:
-            print(f"Processed {num_points} images!")
+#         if num_points % 1000 == 0:
+#             print(f"Processed {num_points} images!")
 
-    print(f"Average area size is: {total_area_size / num_points}")
-    print(f"Average precision is: {total_precision / num_points}")
+#     print(f"Average area size is: {total_area_size / num_points}")
+#     print(f"Average precision is: {total_precision / num_points}")
 
 
 if __name__ == "__main__":
     # Use batch size = 1 to handle a single image at a time.
     model, data_loader_val, transform, device, args = prepare(1)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    acc = evaluate_model(model, data_loader_val, device)
+    print("Test set accuracy:", acc)
 
     # Generate all explanation images.
     generate_explanations(model, data_loader_val, device)
-
-    if args.loss_status > 0:
-        exp_path = "exps/positive"
-    else:
-        exp_path = "exps/negative"
-
-    # Calculate area size and precision metrics.
-    if args.area_prec:
-        print("Calculating the area size and precision...")
-        eval(data_loader_val, transform, device, args.loss_status, args.img_size)
-
-    # Calculate infidelity and sensitivity metrics.
-    if args.saliency:
-        print("Calculating the infidelity and sensitivity...")
-
-        with open("lsc_label_id.json") as json_file:
-            lsc_dict = json.load(json_file)
-
-        infid, sens = calc_infid_and_sens(model, data_loader_val, exp_path, args.loss_status, lsc_dict)
-        print("Average infidelity is:", infid)
-        print("Average sensitivity:", sens)
-
-    # Calculate IAUC and DAUC metrics.
-    if args.auc:
-        print("Calculating the IAUC and DAUC...")
-        # Prepare data with a bigger batch size.
-        batch_size = args.batch_size
-        model, data_loader_val, transform, device, args = prepare(batch_size)
-
-        # Load all explanation images.
-        exp_files = exp_data.get_exp_filenames(exp_path)
-        exp_dataloader = torch.utils.data.DataLoader(
-            exp_data.ExpData(exp_files, args.img_size, resize=True),
-            batch_size,
-            shuffle=False,
-            num_workers=1,
-            pin_memory=True,
-        )
-
-        iauc, dauc = calc_iauc_and_dauc_batch(model, data_loader_val, exp_dataloader, args.img_size, args.device)
-        print(f"Average IAUC is: {iauc}")
-        print(f"Average DAUC is: {dauc}")
