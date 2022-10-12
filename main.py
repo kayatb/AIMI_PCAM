@@ -1,5 +1,8 @@
 # import dataset
 from train import train
+from models import EqvModel
+
+import math
 
 import argparse
 # from json import load
@@ -18,6 +21,7 @@ def add_args():
     parser.add_argument("--pretrained", action='store_true')
     parser.add_argument("--no_startup_epoch", action='store_true')
     parser.add_argument("--seed", default=432, type=int)
+    parser.add_argument("--load_checkpoint", action='store_true')
 
     parser.add_argument("--weight_decay_base", choices=['zero', 'pretrained'], default=None)
     parser.add_argument("--weight_decay_strength", type=float, default=0.001)
@@ -34,6 +38,8 @@ def add_args():
 
     parser.add_argument("--tqdm", action='store_true')
     parser.add_argument("--max_batches_per_epoch", default=None, type=int)
+    parser.add_argument("--rotations", type=int, default=4)
+    parser.add_argument("--file_name", type=str, default=None)
 
     # fine-tuning settings (not implemented)
     # parser.add_argument("--freeze_layers", default=2, type=int, help="number of freeze layers")
@@ -49,7 +55,7 @@ def add_args():
     return parser
 
 
-def load_model(model_name, pretrained=False):
+def load_model(model_name, pretrained, args):
     """ Return the specified model. """
     # TODO: add more models here.
     if model_name == "resnet18":
@@ -59,6 +65,16 @@ def load_model(model_name, pretrained=False):
             resnet = torchvision.models.resnet18(num_classes=1000, pretrained=True)
             resnet.fc = nn.Linear(resnet.fc.in_features, 2)
             return resnet, lambda model: model.fc.parameters()
+    if model_name == "escnn":
+        base_hidden_dims = [12, 12, None, 24, 24, None, 48, 48, None, 96, 96, None, 96, 96, None, 192, 192]
+        scale = math.sqrt(args.rotations * 2)
+        hidden_dims = [
+            dim if dim is None else int(dim / scale)
+            for dim in base_hidden_dims
+        ]
+        
+        model = EqvModel(hidden_dims)
+        return model, lambda model: model.parameters()
     else:
         raise Error(f"Unknown model name {model_name}.")
 
@@ -81,7 +97,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser("PCAM model training and evaluation script", parents=[add_args()])
     args = parser.parse_args()
 
-    model, startup_params = load_model(args.model, args.pretrained)
+    model, startup_params = load_model(args.model, args.pretrained, args)
 
     if args.weight_decay_base == "zero":
         weight_decay_base = 0

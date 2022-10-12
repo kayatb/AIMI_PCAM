@@ -10,6 +10,19 @@ from copy import deepcopy
 from utils import optional_tqdm
 import torchvision
 
+class TTA(nn.Module):
+    def __init__(self, base):
+        super().__init__()
+        self.base = base
+
+    def forward(self, x: torch.Tensor):
+        pred = sum([
+            self.base(x.rot90(rotation, dims=(-1, -2)))
+            for rotation in range(4)
+        ]) / 4
+
+        return pred
+
 def calc_accuracy(predictions, targets):
     """
     Computes the prediction accuracy, i.e. the average of correct predictions
@@ -105,13 +118,20 @@ def train(model: nn.Module, args, startup_params=None, weight_decay_base=None, w
     logging_info['no_epochs'] = args.epochs
 
     best_val_acc = 0
-    best_model = None
+    # best_model = None
 
     # Training loop including validation
     if startup_params is not None:
         optimizer = optim.Adam(startup_params(model), lr=args.lr)
     else:
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    if args.file_name is None:
+        save_filename = os.path.join(args.output_dir, f"{args.model}_best_model")
+    else:
+        save_filename = args.file_name
+
+    if args.load_checkpoint:
+        model.load_state_dict(torch.load(save_filename + ".pt"))
 
     print("=== Starting the training ===")
     for e in range(args.epochs):
@@ -123,7 +143,8 @@ def train(model: nn.Module, args, startup_params=None, weight_decay_base=None, w
         train_correct = 0
         train_incorrect = 0
 
-        for x, labels in optional_tqdm(dataloader_train, args):
+        data_iterator = optional_tqdm(dataloader_train, args)
+        for x, labels in data_iterator:
             batches_count += 1
 
             if args.max_batches_per_epoch is not None and batches_count >= args.max_batches_per_epoch:
@@ -150,13 +171,17 @@ def train(model: nn.Module, args, startup_params=None, weight_decay_base=None, w
             # Update parameters
             optimizer.step()
 
+            if args.tqdm:
+                train_acc = train_correct / (train_correct + train_incorrect) # evaluate_model(model, dataloader_train, device)
+                data_iterator.set_description(f"train_acc = {train_acc:.3f}")
+
             if weight_decay_base == 0:
                 optimizer.zero_grad()
                 for parameter in model.parameters():
                     parameter.data.add_(-parameter, alpha=weight_decay_strength)
             elif isinstance(weight_decay_base, torchvision.models.ResNet) and isinstance(model, torchvision.models.ResNet):
                 optimizer.zero_grad()
-                weight_decay_base: torchvision.models.ResNet = weight_decay_base
+                # weight_decay_base: torchvision.models.ResNet = weight_decay_base
                 # directional_weight_decay(model.conv1.parameters(), weight_decay_base.conv1.parameters())
                 directional_weight_decay(model.conv1  .parameters(), weight_decay_base.conv1  .parameters(), strength=weight_decay_strength)
                 directional_weight_decay(model.bn1    .parameters(), weight_decay_base.bn1    .parameters(), strength=weight_decay_strength)
@@ -169,8 +194,6 @@ def train(model: nn.Module, args, startup_params=None, weight_decay_base=None, w
 
                 # for parameter, base_value in zip(model.parameters(), weight_decay_base.parameters()):
                 #     parameter.add_(-parameter, base_value, alpha=weight_decay_strength)
-
-                weight_decay_base
                 
         loss_value /= batches_count  # Average over all batches.
         logging_info['train_loss'].append(loss_value)
@@ -185,27 +208,30 @@ def train(model: nn.Module, args, startup_params=None, weight_decay_base=None, w
 
         # Update best model (if necessary)
         if val_acc > best_val_acc:
-            best_model = deepcopy(model)
+            # best_model = deepcopy(model)
+            torch.save(model.state_dict(), save_filename + ".pt")
+            print(f"Saved the best performing model at: {save_filename}.pt")
+
             best_val_acc = val_acc
 
         if startup_params is not None:
             optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # Test best model
+    model.load_state_dict(torch.load(save_filename + ".pt"))
     print("=== Finished training, now evaluating on the test set ===")
-    test_accuracy = evaluate_model(best_model, dataloader_test, device)
+    test_accuracy = evaluate_model(model, dataloader_test, device)
     logging_info['test_acc'] = test_accuracy
     print(f"Final Test Set Accuracy: {test_accuracy}")
 
     if args.output_dir:
         os.makedirs(args.output_dir, exist_ok=True)
-        filename = os.path.join(args.output_dir, f"{args.model}_best_model")
 
-        torch.save(best_model, filename + ".pt")
-        print(f"Saved the best performing model at: {filename}.pt")
+        torch.save(model.state_dict(), save_filename + ".pt")
+        print(f"Saved the best performing model at: {save_filename}.pt")
 
-        with open(filename + ".json", 'w') as fp:
+        with open(save_filename + ".json", 'w') as fp:
             json.dump(logging_info, fp)
-        print(f"Saved logging info at: {filename}.json")
+        print(f"Saved logging info at: {save_filename}.json")
 
     return model, logging_info

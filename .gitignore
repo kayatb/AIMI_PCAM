@@ -1,5 +1,6 @@
 .vscode
 .vimspector.json
+*.pt
 
 /data/
 saved_models/
