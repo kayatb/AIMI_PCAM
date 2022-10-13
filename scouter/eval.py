@@ -25,11 +25,18 @@ import os.path
 
 import numpy as np
 import torch
+import torchvision
 from PIL import Image
-from dataset.ConText import ConText, MakeListImage
+import matplotlib.pyplot as plt
+
+# from dataset.ConText import ConText, MakeListImage
 from sloter.slot_model import SlotModel
 from train import get_args_parser
 from torchvision import transforms
+from torchvision.datasets import PCAM
+from dataset.transform_func import make_transform
+from sloter.utils.vis import apply_colormap_on_image
+
 
 # from metrics.utils import exp_data
 # from metrics.area_size import calc_area_size
@@ -93,6 +100,7 @@ def prepare(batch_size):
     """Prepare model, datasets etc. for evaluation."""
     # Parse command line arguments
     parser = argparse.ArgumentParser("model training and evaluation script", parents=[get_args_parser()])
+    parser.add_argument("--model_name", required=True, help="Filename of saved model")
     parser.add_argument(
         "--csv",
         default="data/imagenet/LOC_val_solution.csv",
@@ -116,13 +124,13 @@ def prepare(batch_size):
     for arg_id, arg in enumerate(args_for_evaluation):
         args_dict[arg] = args_type[arg_id](args_dict[arg])
 
-    model_name = (
-        f"{args.dataset}_"
-        + f"{'use_slot_' if args.use_slot else 'no_slot_'}"
-        + f"{'negative_' if args.use_slot and args.loss_status != 1 else ''}"
-        + f"{'for_area_size_'+str(args.lambda_value) + '_'+ str(args.slots_per_class) + '_' if args.cal_area_size else ''}"
-        + "checkpoint.pth"
-    )
+    # model_name = (
+    #     f"{args.dataset}_"
+    #     + f"{'use_slot_' if args.use_slot else 'no_slot_'}"
+    #     + f"{'negative_' if args.use_slot and args.loss_status != 1 else ''}"
+    #     + f"{'for_area_size_'+str(args.lambda_value) + '_'+ str(args.slots_per_class) + '_' if args.cal_area_size else ''}"
+    #     + "checkpoint.pth"
+    # )
 
     args.use_pre = False
 
@@ -136,15 +144,14 @@ def prepare(batch_size):
     )
 
     # Retrieve the data. We only need to evaluate the validation set.
-    _, val = MakeListImage(args).get_data()
-    dataset_val = ConText(val, transform=transform)
+    dataset_val = PCAM("data", "test", transform)
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, batch_size, shuffle=False, num_workers=1, pin_memory=True
     )
 
     # Load the model from checkpoint.
     model = SlotModel(args)
-    checkpoint = torch.load(f"{args.output_dir}/" + model_name, map_location=args.device)
+    checkpoint = torch.load(f"{args.output_dir}" + args.model_name, map_location=args.device)
     model.load_state_dict(checkpoint["model"])
     model.to(args.device)
     model.eval()
@@ -155,9 +162,9 @@ def prepare(batch_size):
 def prepare_data_point(data, transform, device):
     """Prepare a single datapoint (image, label, file name) to be used in evaluation or
     explanation generation."""
-    image = data["image"][0]
-    label = data["label"][0].item()
-    fname = os.path.basename(data["names"][0])[:-5]  # Remove .JPEG extension.
+    image = data[0][0]
+    label = data[1][0].item()
+    # fname = os.path.basename(data["names"][0])[:-5]  # Remove .JPEG extension.
 
     image_orl = Image.fromarray(
         (image.cpu().detach().numpy() * 255).astype(np.uint8).transpose((1, 2, 0)),
@@ -165,69 +172,55 @@ def prepare_data_point(data, transform, device):
     )
 
     image = transform(image_orl)
-    transform2 = transforms.Compose([transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
-    image = transform2(image)
-    image = image.to(device, dtype=torch.float32)
+    transform2 = transforms.Compose([transforms.Normalize([0.7008, 0.5384, 0.6916], [0.2350, 0.2774, 0.2128])])
+    norm_image = transform2(image)
+    norm_image = norm_image.to(device, dtype=torch.float32)
 
-    return image, label, fname
+    return norm_image, label, image
 
 
-def generate_explanations(model, data_loader_val, device, save_path=None):
+def generate_explanations(model, data_loader_val, device, model_name, save_path=None):
     """Generate and save the explanations of the model for the images in the validation set.
     Only the ground truth explanation and the least similar class are generated/saved."""
     if not save_path:
-        os.makedirs("exps/positive", exist_ok=True)
-        os.makedirs("exps/negative", exist_ok=True)
-        save_path = "exps"
+        os.makedirs(f"exps/{model_name}/positive", exist_ok=True)
+        os.makedirs(f"exps/{model_name}/negative", exist_ok=True)
+        save_path = f"exps/{model_name}"
 
-    for data in data_loader_val:
-        image, label, fname = prepare_data_point(data, transform, device)
+    # for i, data in enumerate(data_loader_val):
+    for i, data in enumerate(data_loader_val):
+        print(i)
+        image, label, unnorm_img = prepare_data_point(data, transform, device)
         # Explanation image is generated during forward pass of image in the model.
-        _ = model(torch.unsqueeze(image, dim=0), save_id=(label, abs(label - 1), save_path, fname))
+        _ = model(torch.unsqueeze(image, dim=0), save_id=(label, abs(label - 1), save_path, i))
+        save_explanation(unnorm_img, f"{save_path}/positive", i, label)
+        # save_explanation(unnorm_img, f"{save_path}/negative", i)
 
 
-# def eval(data_loader_val, transform, device, loss_status, img_size, exp_dir="exps"):
-#     """Evaluate the model on several metrics using the validation set."""
-#     # Load the bounding boxes
-#     with open("resized_bboxes.json", "r") as fp:
-#         bboxes = json.load(fp)
+def save_explanation(image, dir, exp_id, label):
+    # image = image / 2 + 0.5     # unnormalize
+    npimg = image.numpy()
+    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.axis("off")
+    plt.savefig("raw_image.png", bbox_inches="tight", pad_inches=0.0)
+    raw_image = Image.open("raw_image.png")
 
-#     total_area_size = 0
-#     total_precision = 0
+    slot_image = np.array(
+        Image.open(f"{dir}/{exp_id}.png").resize(raw_image.size, resample=Image.BILINEAR), dtype=np.uint8
+    )
 
-#     num_points = 0
-#     # Process each image.
-#     for data in data_loader_val:
-#         _, _, fname = prepare_data_point(data, transform, device)
-
-#         # Determine for which image/explanation to evaluate.
-#         if loss_status > 0:  # Positive explanations
-#             dir = "positive"
-#         else:  # Negative explanations
-#             dir = "negative"
-
-#         exp_image = Image.open(os.path.join(exp_dir, dir, fname + ".png"))
-
-#         # Calculate all metrics
-#         total_area_size += calc_area_size(exp_image)
-#         total_precision += calc_precision(exp_image, img_size, fname, bboxes)
-
-#         num_points += 1
-
-#         if num_points % 1000 == 0:
-#             print(f"Processed {num_points} images!")
-
-#     print(f"Average area size is: {total_area_size / num_points}")
-#     print(f"Average precision is: {total_precision / num_points}")
+    heatmap_only, heatmap_on_image = apply_colormap_on_image(raw_image, slot_image, "jet")
+    heatmap_on_image.save(f"{dir}/img_{exp_id}_l{label}.png")
 
 
 if __name__ == "__main__":
     # Use batch size = 1 to handle a single image at a time.
+    # model, data_loader_val, transform, device, args = prepare(128)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # acc = evaluate_model(model, data_loader_val, device)
+    # print("Test set accuracy:", acc)
+
     model, data_loader_val, transform, device, args = prepare(1)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    acc = evaluate_model(model, data_loader_val, device)
-    print("Test set accuracy:", acc)
-
     # Generate all explanation images.
-    generate_explanations(model, data_loader_val, device)
+    generate_explanations(model, data_loader_val, device, args.model_name)
