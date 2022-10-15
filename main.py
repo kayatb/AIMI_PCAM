@@ -12,6 +12,8 @@ import torchvision
 import torch
 from torch import nn
 from copy import Error, deepcopy
+import timm
+
 
 def add_args():
     """ Add a lot of commande line arguments for specifying all sorts of hyperparams and other settings. """
@@ -65,6 +67,31 @@ def load_model(model_name, pretrained, args):
             resnet = torchvision.models.resnet18(num_classes=1000, pretrained=True)
             resnet.fc = nn.Linear(resnet.fc.in_features, 2)
             return resnet, lambda model: model.fc.parameters()
+
+    elif model_name == "resnest26d":
+        if not pretrained:
+            return timm.create_model('resnest26d', pretrained=False, num_classes=2), None
+        else:
+            resnest26d = timm.create_model('resnest26d', pretrained=True, num_classes=1000)
+            resnest26d.fc = nn.Linear(resnest26d.fc.in_features, 2)
+            return resnest26d, lambda model: model.fc.parameters()
+
+    elif model_name == "resnest50d":
+        if not pretrained:
+            return timm.create_model('resnest50d', pretrained=False, num_classes=2), None
+        else:
+            resnest50d = timm.create_model('resnest50d', pretrained=True, num_classes=1000)
+            resnest50d.fc = nn.Linear(resnest50d.fc.in_features, 2)
+            return resnest50d, lambda model: model.fc.parameters()
+    
+    elif model_name == "resnest269e":
+        if not pretrained:
+            return timm.create_model('resnest269e', pretrained=False, num_classes=2), None
+        else:
+            resnest269e = timm.create_model('resnest269e', pretrained=True, num_classes=1000)
+            resnest269e.fc = nn.Linear(resnest269e.fc.in_features, 2)
+            return resnest269e, lambda model: model.fc.parameters()
+
     if model_name == "escnn":
         base_hidden_dims = [12, 12, None, 24, 24, None, 48, 48, None, 96, 96, None, 96, 96, None, 192, 192]
         scale = math.sqrt(args.rotations * 2)
