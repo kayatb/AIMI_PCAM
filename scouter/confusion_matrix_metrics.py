@@ -1,23 +1,24 @@
 """
 Calculate the following confusion matrix metrics:
 Area Under Curve, accuracy, precision, recall, F1-score and Kappa for the given model.
-
-In the experiments, these metrics are only reported (and thus implemented) for the ACRIMA dataset.
 """
 
 import argparse
 import torch
-from sklearn.metrics import confusion_matrix, roc_auc_score, cohen_kappa_score
-
+from sklearn.metrics import confusion_matrix, roc_auc_score, cohen_kappa_score, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 
 from train import get_args_parser
-from dataset.ACRIMA import get_data, ACRIMA
-from dataset.transform_func import make_transform
+from dataset.choose_dataset import select_dataset
 from sloter.slot_model import SlotModel
 
 
-def calc_metrics(model, imgs, labels):
-    """Calculate all metrics."""
+def invert_labels(labels):
+    """Turn 0's into 1's and vice versa (necessary for SCOUTER_min models)."""
+    return torch.abs(1 - labels)
+
+
+def obtain_preds(model, imgs):
     model.eval()
 
     # Obtain the model predictions.
@@ -26,8 +27,22 @@ def calc_metrics(model, imgs, labels):
 
     preds = torch.argmax(pred_probs, dim=1)
 
+    return preds, pred_probs
+
+
+def calc_metrics(labels, preds, pred_probs, negative, model_name):
+    """Calculate all metrics."""
+    if negative:
+        labels = invert_labels(labels)
+
     # Calculate the confusion matrix.
-    tn, fp, fn, tp = confusion_matrix(labels.cpu(), preds.cpu()).ravel()
+    cm = confusion_matrix(labels.cpu(), preds.cpu())
+    tn, fp, fn, tp = cm.ravel()
+
+    # Save confusion matrix figure.
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp.plot()
+    plt.savefig(f"conf_matrix_{model_name}.png", dpi=600, bbox_inches="tight")
 
     # Calculate the metrics.
     metrics = {}
@@ -43,9 +58,11 @@ def calc_metrics(model, imgs, labels):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("model training and evaluation script", parents=[get_args_parser()])
+    parser.add_argument("--model_name", required=True, help="Path to the model checkpoint")
+    parser.add_argument("--negative", action="store_true", help="whether model is positive of negative SCOUTER")
     args = parser.parse_args()
 
-    assert args.dataset == "ACRIMA", "Calculating the metrics is only implemented for the ACRIMA dataset."
+    assert args.dataset == "PCAM", "Calculating the metrics is only implemented for the PCAM dataset."
 
     args_dict = vars(args)
     args_for_evaluation = ["num_classes", "lambda_value", "power", "slots_per_class"]
@@ -55,31 +72,40 @@ if __name__ == "__main__":
 
     device = torch.device(args.device)
 
-    # Retrieve the data.
-    _, val_data = get_data(args.dataset_dir)
-    val_dataset = ACRIMA(val_data, transform=make_transform(args, "val"))
-    # Use the whole length as batch size, to process all images at the same time.
-    # The ACRIMA dataset is small, so this should be no problem.
-    data_loader_val = torch.utils.data.DataLoader(
-        val_dataset, len(val_dataset), shuffle=False, num_workers=1, pin_memory=True
+    # Retrieve the data. We only need to evaluate the test set.
+
+    _, dataset_test = select_dataset(args)
+    data_loader_test = torch.utils.data.DataLoader(
+        dataset_test, args.batch_size, shuffle=False, num_workers=1, pin_memory=True
     )
 
-    # Load the model from checkpoint.
-    model_name = (
-        f"{args.dataset}_"
-        + f"{'use_slot_' if args.use_slot else 'no_slot_'}"
-        + f"{'negative_' if args.use_slot and args.loss_status != 1 else ''}"
-        + f"{'for_area_size_'+str(args.lambda_value) + '_'+ str(args.slots_per_class) + '_' if args.cal_area_size else ''}"
-        + "checkpoint.pth"
-    )
     model = SlotModel(args)
-    checkpoint = torch.load(f"{args.output_dir}/" + model_name, map_location=args.device)
+    checkpoint = torch.load(f"{args.output_dir}/" + args.model_name, map_location=args.device)
+
     model.load_state_dict(checkpoint["model"])
     model.to(device)
 
     # Calculate the metrics.
-    for batch in data_loader_val:  # Should be only a single batch.
-        imgs = batch["image"].to(device, dtype=torch.float32)
-        labels = batch["label"].to(device, dtype=torch.int8)
-        metrics = calc_metrics(model, imgs, labels)
-        print(metrics)
+    all_preds = None
+    all_labels = None
+    all_pred_probs = None
+    for batch in data_loader_test:
+        imgs = batch[0].to(device, dtype=torch.float32)
+        labels = batch[1].to(device, dtype=torch.int8)
+
+        if all_labels is None:
+            all_labels = labels
+        else:
+            all_labels = torch.cat((all_labels, labels), 0)
+
+        preds, pred_probs = obtain_preds(model, imgs)
+
+        if all_preds is None:
+            all_preds = preds
+            all_pred_probs = pred_probs
+        else:
+            all_preds = torch.cat((all_preds, preds), 0)
+            all_pred_probs = torch.cat((all_pred_probs, pred_probs), 0)
+
+    metrics = calc_metrics(all_labels, all_preds, all_pred_probs, args.negative, args.model_name)
+    print(metrics)
